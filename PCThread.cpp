@@ -15,7 +15,7 @@
 #define BUFFER_SIZE 2048
 #define TCP_RECV_BUF_LEN 1600
 #define TCP_HEAD_LINE_LEN_MAX 256
-#define TCP_HEAD_ROW_NUM_MAX 20
+#define TCP_HEAD_ROW_NUM_MAX 50
 #define TCP_BODY_LEN_MAX 20000
 #define TCP_SPLIT_LEN_LEN_MAX 5
 
@@ -113,12 +113,12 @@ void * sendThread(void *args)
     {
         shiftTS(ptHead->sendModifier, ptHead->sendInterval);
         if(tcpSendN(&(ptHead->tcpHandle), ptHead->lpbuf, strlen(ptHead->lpbuf)) < 0){
-            fprintf(stderr, "tcpSendN failed..\n");
+            fprintf(stderr, "tcpSendN failed..[%s]\n", ptHead->lpbuf);
             return 0;
         }
     }
     if(tcpSendN(&(ptHead->tcpHandle), ptHead->lpbufend, strlen(ptHead->lpbufend)) < 0){
-        fprintf(stderr, "tcpSendN failed..\n");
+        fprintf(stderr, "tcpSendN failed..[%s]\n", ptHead->lpbufend);
         return 0;
     }
 
@@ -264,7 +264,7 @@ void * recvThread(void *args)
                             {
                                 if(parseBody(gPlatform, res.body, res.bodyIndex, &price))
                                 {
-                                    fprintf(stderr, "parseBody fail\n");
+                                    fprintf(stderr, "parseBody fail.[%s]\n", res.body);
                                     goto end; //parse fail, exit thread
                                 }
                                 //printResponse(&res);
@@ -314,7 +314,7 @@ void * recvThread(void *args)
                     {
                         if(parseBody(gPlatform, res.body, res.bodyIndex, &price))
                         {
-                            fprintf(stderr, "parseBody fail\n");
+                            fprintf(stderr, "parseBody fail.[%s]\n", res.body);
                             goto end; //parse fail, exit thread
                         }
                         //printResponse(&res);

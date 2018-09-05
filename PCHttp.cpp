@@ -17,6 +17,7 @@
 #include "PriceCenter.h"
 
 #define MY_HTTP_DEFAULT_PORT 80
+#define MY_HTTPS_DEFAULT_PORT 443
 
 //HTTP API START
 int http_parse_url(const char *url,char *host,char *file,int *port, int *https)
@@ -55,9 +56,13 @@ int http_parse_url(const char *url,char *host,char *file,int *port, int *https)
     if(ptr1){
         *ptr1++ = '\0';
         *port = atoi(ptr1);
-    }else{
+    }else if(!*https){
         *port = MY_HTTP_DEFAULT_PORT;
-    }
+    }else if(*https){
+        *port = MY_HTTPS_DEFAULT_PORT;
+    }else 
+        return -1;
+
     return 0;
 }
 
@@ -103,9 +108,9 @@ void http_tcpclient_close(int socket){
 int tcpConnect(const char *sendip, const char *bindip, int port, struct st_tcpHandle *pH)
 {
     if((pH->socket_fd = http_tcpclient_create(sendip, bindip, port)) < 0) return -1;
-        // Establish a connection using an SSL layer
     if(pH->https)
     {
+        // Establish a connection using an SSL layer
         pH->sslContext = NULL;
         pH->sslHandle = NULL;
         // Register the error strings for libcrypto & libssl
@@ -114,19 +119,31 @@ int tcpConnect(const char *sendip, const char *bindip, int port, struct st_tcpHa
         SSL_library_init ();
         OpenSSL_add_all_algorithms();
         // New context saying we are a client, and using SSL 2 or 3
-        pH->sslContext = SSL_CTX_new (SSLv23_client_method ());
+        pH->sslContext = SSL_CTX_new(SSLv23_client_method());
         if (pH->sslContext == NULL)
-            ERR_print_errors_fp (stderr);
+        {
+            ERR_print_errors_fp(stderr);
+            return -1;
+        }
         // Create an SSL struct for the connection
-        pH->sslHandle = SSL_new (pH->sslContext);
+        pH->sslHandle = SSL_new(pH->sslContext);
         if (pH->sslHandle == NULL)
+        {
             ERR_print_errors_fp (stderr);
+            return -1;
+        }
         // Connect the SSL struct to our connection
-        if (!SSL_set_fd (pH->sslHandle, pH->socket_fd))
-            ERR_print_errors_fp (stderr);
+        if (!SSL_set_fd(pH->sslHandle, pH->socket_fd))
+        {
+            ERR_print_errors_fp(stderr);
+            return -1;
+        }
         // Initiate SSL handshake
-        if (SSL_connect (pH->sslHandle) != 1)
-            ERR_print_errors_fp (stderr);
+        if (SSL_connect(pH->sslHandle) != 1)
+        {
+            ERR_print_errors_fp(stderr);
+            return -1;
+        }
     }
     return 0;
 }

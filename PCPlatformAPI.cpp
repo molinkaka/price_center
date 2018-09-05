@@ -95,8 +95,6 @@ int bian(char *httpBody, int bodyLen, struct pc_price *pprice)
     char tstmp[14];
     int slen;
 
-    while(i < TOP_N && k < slen && j < (sizeof(pprice->asks) - 1))
-
     memset(tstmp, 0x00, sizeof(tstmp));
     if((s = strstr(httpBody, "\"lastUpdateId\":")) == NULL) return -1;
     s += strlen("\"lastUpdateId\":");
