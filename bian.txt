@@ -1,0 +1,9 @@
+#kkk
+numOfConnections 10
+tps 20
+url https://api.binance.com/api/v1/depth?symbol=ETHUSDT&limit=5
+platform 45
+#kkk
+journalWriterName BianWriter
+bindIPListFileName bianbind.txt
+sendIPListFileName biansend.txt
