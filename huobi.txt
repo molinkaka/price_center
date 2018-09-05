@@ -1,7 +1,8 @@
 #kkk
 numOfConnections 10
-tps 100
-url http://api.huobipro.com/market/depth?symbol=ethusdt&type=step1
+tps 20
+##url http://api.huobipro.com/market/depth?symbol=ethusdt&type=step1
+url http://api.huobipro.com/kkk
 platform 30
 #kkk
 

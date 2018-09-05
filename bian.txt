@@ -1,7 +1,8 @@
 #kkk
-numOfConnections 10
+numOfConnections 1
 tps 20
-url https://api.binance.com/api/v1/depth?symbol=ETHUSDT&limit=5
+#url https://api.binance.com/api/v1/depth?symbol=ETHUSDT&limit=5
+url https://api.binance.com/kkk
 platform 45
 #kkk
 journalWriterName BianWriter

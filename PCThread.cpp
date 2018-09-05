@@ -85,7 +85,50 @@ struct st_recv
     int     index;
     int     len;
 };
+/*for ssl support multi thread*/
+/* we have this global to let the callback get easy access to it */ 
+static pthread_mutex_t *lockarray;
+static void lock_callback(int mode, int type, const char *file, int line)
+{
+    (void)file;
+    (void)line;
+    if (mode & CRYPTO_LOCK) {
+        pthread_mutex_lock(&(lockarray[type]));
+    }
+    else {
+        pthread_mutex_unlock(&(lockarray[type]));
+    }
+}
+static unsigned long thread_id(void)
+{
+    unsigned long ret;
 
+    ret=(unsigned long)pthread_self();
+    return(ret);
+}
+static void init_locks(void)
+{
+    int i;
+
+    lockarray=(pthread_mutex_t *)OPENSSL_malloc(CRYPTO_num_locks() *
+            sizeof(pthread_mutex_t));
+    for (i=0; i<CRYPTO_num_locks(); i++) {
+        pthread_mutex_init(&(lockarray[i]),NULL);
+    }
+
+    CRYPTO_set_id_callback((unsigned long (*)())thread_id);
+    CRYPTO_set_locking_callback((void (*)(int, int, const char*, int))lock_callback);
+}
+static void kill_locks(void)
+{
+    int i;
+
+    CRYPTO_set_locking_callback(NULL);
+    for (i=0; i<CRYPTO_num_locks(); i++)
+        pthread_mutex_destroy(&(lockarray[i]));
+
+    OPENSSL_free(lockarray);
+}
 /*
  *adapt send time point
  */
@@ -114,12 +157,12 @@ void * sendThread(void *args)
         shiftTS(ptHead->sendModifier, ptHead->sendInterval);
         if(tcpSendN(&(ptHead->tcpHandle), ptHead->lpbuf, strlen(ptHead->lpbuf)) < 0){
             fprintf(stderr, "tcpSendN failed..[%s]\n", ptHead->lpbuf);
-            return 0;
+            return NULL;
         }
     }
     if(tcpSendN(&(ptHead->tcpHandle), ptHead->lpbufend, strlen(ptHead->lpbufend)) < 0){
         fprintf(stderr, "tcpSendN failed..[%s]\n", ptHead->lpbufend);
-        return 0;
+        return NULL;
     }
 
     return 0;
@@ -173,6 +216,7 @@ void *dumpThread(void *args)
 int parseHead(struct st_response *pres)
 {
     int i;
+    if(strstr(pres->head[0], "200") == NULL) return -1;
     for(i = 0;i < pres->rowIndex; i++)
     {
         if(strstr(pres->head[i], "Transfer-Encoding: chunked"))
@@ -186,7 +230,7 @@ int parseHead(struct st_response *pres)
             break;
         }
     }
-    if(i == pres->rowIndex) return 1;
+    if(i == pres->rowIndex) return -1;
     else return 0;
 }
 
@@ -226,7 +270,7 @@ void * recvThread(void *args)
                     {
                         if(parseHead(&res)) 
                         {
-                            fprintf(stderr, "parseHead fail\n");
+                            fprintf(stderr, "parseHead fail.[%s]\n", res.head[0]);
                             goto end; //parse fail, exit thread
                         }
                         else status = 'B'; //begin read body
@@ -422,6 +466,8 @@ int PCStart(struct pc_cfg *pcfg, void (*pf)(struct pc_price *))
         fprintf(stderr, "set attr error. errno = %d\n", errno);
         return 1;
     }
+    //set ssl multi thread lock
+    init_locks();
     //connectionThreadHeads init
     j = 0;k = 0;
     for(i=0;i<numOfConnections;i++)
@@ -475,5 +521,7 @@ int PCStart(struct pc_cfg *pcfg, void (*pf)(struct pc_price *))
         }
         usleep(100000);
     }
+    //free ssl multi thred lock
+    kill_locks();
     return 0;
 }
