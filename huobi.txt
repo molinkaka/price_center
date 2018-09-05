@@ -1,0 +1,10 @@
+#kkk
+numOfConnections 10
+tps 100
+url http://api.huobipro.com/market/depth?symbol=ethusdt&type=step1
+platform 30
+#kkk
+
+journalWriterName HuobiWriter
+bindIPListFileName huobibind.txt
+sendIPListFileName huobisend.txt
