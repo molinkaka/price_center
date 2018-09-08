@@ -39,6 +39,6 @@ TARGET_LINK_LIBRARIES(huobit journal)
 INSTALL(TARGETS huobit DESTINATION "bin")
 
 ADD_EXECUTABLE(price_center PriceCenter.cpp PriceCenter.h PCHttp.cpp PCThread.cpp PCPlatformAPI.cpp)
-ADD_DEFINITIONS(-g)
+ADD_DEFINITIONS(-g -O0)
 TARGET_LINK_LIBRARIES(price_center journal pthread ssl crypto)
 INSTALL(TARGETS price_center DESTINATION "bin")

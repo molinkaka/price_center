@@ -1,5 +1,5 @@
 #kkk
-numOfConnections 1
+numOfConnections 10
 tps 20
 #url https://api.binance.com/api/v1/depth?symbol=ETHUSDT&limit=5
 url https://api.binance.com/kkk

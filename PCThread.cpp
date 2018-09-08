@@ -47,7 +47,11 @@ struct st_connectionThreadHead
     //int     socket_fd;  //socket with platform
     struct st_tcpHandle tcpHandle;
     int     connected;  //1 if connection is created
-    pthread_mutex_t connectedUpdateLock;  //lock when update bidsTopN asksTopN ts
+    unsigned char    errorCode;
+    char    errorDesc[256];
+    unsigned char    sendExit;
+    unsigned char    recvExit;
+    pthread_mutex_t updateLock;  //lock when update bidsTopN asksTopN ts
     char    lpbuf[BUFFER_SIZE*4];  //request tcp content
     char    lpbufend[BUFFER_SIZE*4];  //final request tcp content
     char    sendip[16];  //des ip
@@ -151,21 +155,40 @@ void * sendThread(void *args)
     int p;
     struct st_connectionThreadHead *ptHead;
 
+    unsigned char  errorCode = 0;
+    char errorDesc[256] = "";
+
     ptHead = (struct st_connectionThreadHead *)args;
+    //pthread_mutex_lock(&ptHead->connectedUpdateLock);
+    //connected = ptHead->connected;
+    //pthread_mutex_unlock(&ptHead->connectedUpdateLock);
+    //if(!connected) return NULL;
     for(p=0;p<SESSION_SEND_TIMES;p++)
     {
+        if(ptHead->errorFlag) 
+            goto normalend;
         shiftTS(ptHead->sendModifier, ptHead->sendInterval);
         if(tcpSendN(&(ptHead->tcpHandle), ptHead->lpbuf, strlen(ptHead->lpbuf)) < 0){
-            fprintf(stderr, "tcpSendN failed..[%s]\n", ptHead->lpbuf);
-            return NULL;
+            erorCode = 1; snprintf(errorDesc, sizeof(errorDesc) -1, "tcpSendN failed..[%s]\n", ptHead->lpbuf);
+            goto exceptionend;
         }
     }
     if(tcpSendN(&(ptHead->tcpHandle), ptHead->lpbufend, strlen(ptHead->lpbufend)) < 0){
-        fprintf(stderr, "tcpSendN failed..[%s]\n", ptHead->lpbufend);
-        return NULL;
+        erorCode = 1; snprintf(errorDesc, sizeof(errorDesc) -1, "tcpSendN failed..[%s]\n", ptHead->lpbufend);
+        goto exceptionend;
     }
+    goto normalend;
 
-    return 0;
+exceptionend:
+    pthread_mutex_lock(&ptHead->updateLock);
+    ptHead->errorCode = errorCode;
+    strcpy(ptHead->errorDesc, errorDesc);
+    pthread_mutex_unlock(&ptHead->updateLock);
+    perror(errorDesc);
+
+normalend:
+    ptHead->sendExit = 1;
+    return NULL;
 }
 
 
@@ -245,6 +268,9 @@ void * recvThread(void *args)
     struct timeval current;
     struct st_connectionThreadHead *ptHead;
 
+    unsigned char errorCode = 0;
+    char errorDesc[256] = "";
+
     ptHead = (struct st_connectionThreadHead *)args;
     memset(&res, 0x00, sizeof(res));
     memset(&rcv, 0x00, sizeof(rcv));
@@ -253,6 +279,8 @@ void * recvThread(void *args)
     status = 'H';
     while((rcv.len = tcpRecv(&(ptHead->tcpHandle), rcv.buf, TCP_RECV_BUF_LEN)) > 0)
     {
+        if(ptHead->errorFlag)
+            goto normalend;
         for(rcv.index = 0; rcv.index < rcv.len; rcv.index ++)
         {
             if(status == 'H')
@@ -270,8 +298,8 @@ void * recvThread(void *args)
                     {
                         if(parseHead(&res)) 
                         {
-                            fprintf(stderr, "parseHead fail.[%s]\n", res.head[0]);
-                            goto end; //parse fail, exit thread
+                            erorCode = 1; snprintf(errorDesc, sizeof(errorDesc) -1, "parseHead fail.[%s]",res.head[0]);
+                            goto exceptionend; //parse fail, exit thread
                         }
                         else status = 'B'; //begin read body
                     }
@@ -280,8 +308,8 @@ void * recvThread(void *args)
                         res.rowIndex ++;
                         if(res.rowIndex == TCP_HEAD_ROW_NUM_MAX) 
                         {
-                            fprintf(stderr, "head include too many rows\n");
-                            goto end;  //head include too many rows
+                            erorCode = 1; snprintf(errorDesc, sizeof(errorDesc) -1, "head include too many rows.");
+                            goto exceptionend;  //head include too many rows
                         }
                         res.lineIndex = 0;
                     }
@@ -291,8 +319,8 @@ void * recvThread(void *args)
                     res.lineIndex ++;
                     if(res.lineIndex > TCP_HEAD_LINE_LEN_MAX) 
                     {
-                        fprintf(stderr, "line too long\n");
-                        goto end;;  //line too long
+                        erorCode = 1; snprintf(errorDesc, sizeof(errorDesc) -1,"line too long.");
+                        goto exceptionend;;  //line too long
                     }
                 }
             }
@@ -308,8 +336,8 @@ void * recvThread(void *args)
                             {
                                 if(parseBody(gPlatform, res.body, res.bodyIndex, &price))
                                 {
-                                    fprintf(stderr, "parseBody fail.[%s]\n", res.body);
-                                    goto end; //parse fail, exit thread
+                                    erorCode = 1; snprintf(errorDesc, sizeof(errorDesc) -1, "parseBody fail.[%s]", res.body);
+                                    goto exceptionend; //parse fail, exit thread
                                 }
                                 //printResponse(&res);
                                 process(ptHead, &price);
@@ -331,16 +359,16 @@ void * recvThread(void *args)
                         }
                         else 
                         {
-                            fprintf(stderr, "read split error\n");
-                            goto end; //error
+                            erorCode = 1; snprintf(errorDesc, sizeof(errorDesc) -1, "read split error\n");
+                            goto exceptionend; //error
                         }
                     }
                     else //read split len
                     {
                         if(sp.lenIndex >= sizeof(sp.strHexLen)) 
                         {
-                            fprintf(stderr, "split len len too long\n");
-                            goto end;
+                            erorCode = 1; snprintf(errorDesc, sizeof(errorDesc) -1, "split len len too long\n");
+                            goto exceptionend; //error
                         }
                         sp.strHexLen[sp.lenIndex] = rcv.buf[rcv.index];
                         sp.lenIndex ++;
@@ -358,8 +386,8 @@ void * recvThread(void *args)
                     {
                         if(parseBody(gPlatform, res.body, res.bodyIndex, &price))
                         {
-                            fprintf(stderr, "parseBody fail.[%s]\n", res.body);
-                            goto end; //parse fail, exit thread
+                            erorCode = 1; snprintf(errorDesc, sizeof(errorDesc) -1, "parseBody fail.[%s]\n", res.body);
+                            goto exceptionend; //error
                         }
                         //printResponse(&res);
                         process(ptHead, &price);
@@ -374,12 +402,22 @@ void * recvThread(void *args)
         memset(&rcv, 0x00, sizeof(rcv));
     }
 
-end:
-    tcpClose(&(ptHead->tcpHandle));
-    pthread_mutex_lock(&ptHead->connectedUpdateLock);
-    ptHead->connected = 0;
-    pthread_mutex_unlock(&ptHead->connectedUpdateLock);
-    return 0;
+    //tcpClose(&(ptHead->tcpHandle)); 
+    //pthread_mutex_lock(&ptHead->connectedUpdateLock);
+    //ptHead->connected = 0;
+    //pthread_mutex_unlock(&ptHead->connectedUpdateLock);
+    goto normalend;
+
+exceptionend:
+    pthread_mutex_lock(&ptHead->updateLock);
+    ptHead->errorCode = errorCode;
+    strcpy(ptHead->errorDesc, errorDesc);
+    pthread_mutex_unlock(&ptHead->updateLock);
+    perror(errorDesc);
+
+normalend:
+    ptHead->recvExit = 1;
+    return NULL;
 }
 
 int PCStart(struct pc_cfg *pcfg, void (*pf)(struct pc_price *))
@@ -468,17 +506,21 @@ int PCStart(struct pc_cfg *pcfg, void (*pf)(struct pc_price *))
     }
     //set ssl multi thread lock
     init_locks();
+    signal(SIGPIPE, SIG_IGN);
     //connectionThreadHeads init
     j = 0;k = 0;
     for(i=0;i<numOfConnections;i++)
     {
+        memset(connectionThreadHeads + i, 0x00, sizeof(struct st_connectionThreadHead));
         connectionThreadHeads[i].index = i;
         connectionThreadHeads[i].sendModifier = i * (1000 / tps);
         connectionThreadHeads[i].sendInterval = (1000 * numOfConnections) / tps;
         sprintf(connectionThreadHeads[i].lpbuf,HTTP_GET_KEEP,file,host_addr,port);
         sprintf(connectionThreadHeads[i].lpbufend,HTTP_GET_END,file,host_addr,port);
-        connectionThreadHeads[i].connected = 0;
-        pthread_mutex_init(&connectionThreadHeads[i].connectedUpdateLock, NULL);
+        connectionThreadHeads[i].sendExit = 1;
+        connectionThreadHeads[i].recvExit = 1;
+        //connectionThreadHeads[i].tcpHandle.socket_fd = -1;
+        pthread_mutex_init(&connectionThreadHeads[i].updateLock, NULL);
         strcpy(connectionThreadHeads[i].sendip, sendiplist[j]);
         strcpy(connectionThreadHeads[i].bindip, bindiplist[k]);
         if(strlen(sendiplist[++j]) == 0) j = 0;
@@ -494,28 +536,42 @@ int PCStart(struct pc_cfg *pcfg, void (*pf)(struct pc_price *))
     {
         for(i=0;i<numOfConnections;i++)
         {
-            pthread_mutex_lock(&connectionThreadHeads[i].connectedUpdateLock);
-            connected = connectionThreadHeads[i].connected;
-            pthread_mutex_unlock(&connectionThreadHeads[i].connectedUpdateLock);
-            if(!connected)
+            if(connectionThreadHeads[i].sendExit && connectionThreadHeads[i].recvExit) //recreate session
             {
+                if(connectionThreadHeads[i].tcpHandle.socket_fd) //error session, need dump error
+                {
+                    tcpClose(&(connectionThreadHeads[i].tcpHandle));
+                    pthread_mutex_lock(&connectionThreadHeads[i].updateLock);
+                    //errorCode = connectionThreadHeads[i].errorCode;
+                    //strcpy(errorDesc, connectionThreadHeads[i].errorDesc);
+                    pthread_mutex_unlock(&connectionThreadHeads[i].updateLock);
+                }
                 connectionThreadHeads[i].tcpHandle.https = https;
                 tcpConnect(connectionThreadHeads[i].sendip, connectionThreadHeads[i].bindip, port, &(connectionThreadHeads[i].tcpHandle));
-                if(connectionThreadHeads[i].tcpHandle.socket_fd > 0)
-                {
+                if(connectionThreadHeads[i].tcpHandle.socket_fd > 0) {
+                    connectionThreadHeads[i].errorCode = 0;
+                    connectionThreadHeads[i].sendExit = 0;
+                    connectionThreadHeads[i].recvExit = 0;
                     ret = pthread_create(&id, &attr, sendThread, connectionThreadHeads + i);
-                    if(ret != 0){
-                        tcpClose(&(connectionThreadHeads[i].tcpHandle));
-                        fprintf(stderr, "create send pthead error! errno = %d\n", errno);
-                        break;
+                    if(ret)
+                    {
+                        pthread_mutex_lock(&connectionThreadHeads[i].updateLock);
+                        connectionThreadHeads[i].errorCode = 1;
+                        strcpy(connectionThreadHeads[i].errorDesc, "create sendThread error.");
+                        pthread_mutex_unlock(&connectionThreadHeads[i].updateLock);
+                        ptHead->sendExit = 1;
+
                     }
                     ret = pthread_create(&id, &attr, recvThread, connectionThreadHeads + i);
-                    if(ret != 0){
-                        tcpClose(&(connectionThreadHeads[i].tcpHandle));
-                        fprintf(stderr, "create recv pthead error! errno = %d\n", errno);
-                        break;
+                    if(ret)
+                    {
+                        pthread_mutex_lock(&connectionThreadHeads[i].updateLock);
+                        connectionThreadHeads[i].errorCode = 1;
+                        strcpy(connectionThreadHeads[i].errorDesc, "create sendThread error.");
+                        pthread_mutex_unlock(&connectionThreadHeads[i].updateLock);
+                        ptHead->recvExit = 1;
+
                     }
-                    connectionThreadHeads[i].connected = 1;
                 }
             }
         }

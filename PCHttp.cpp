@@ -157,6 +157,7 @@ void tcpClose(struct st_tcpHandle *pH)
         SSL_free(pH->sslHandle);
         SSL_CTX_free(pH->sslContext);
     }
+    pH->socket_fd = 0;
 }
 
 int tcpRecv(struct st_tcpHandle *pH, char *buf, int size)
