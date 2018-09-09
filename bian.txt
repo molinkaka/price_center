@@ -7,4 +7,4 @@ platform 45
 #kkk
 journalWriterName BianWriter
 bindIPListFileName bianbind.txt
-sendIPListFileName biansend.txt
+sendIPListFileName /home/ubuntu/ThreeLegCat/wingchun/md/biansend.txt

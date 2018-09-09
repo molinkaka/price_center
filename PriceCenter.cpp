@@ -26,7 +26,7 @@ void apiWrite(struct pc_price *pprice)
     char btmp1[PC_VALUE_LEN+1], btmp2[PC_VALUE_LEN+1], atmp1[PC_VALUE_LEN+1], atmp2[PC_VALUE_LEN+1];
     int j;
 
-    printf("%s, %s, %s\n", pprice->ts, pprice->bids, pprice->asks);
+    //printf("%s, %s, %s\n", pprice->ts, pprice->bids, pprice->asks);
     if(apiWriter == NULL)
     {
         return;
@@ -120,6 +120,20 @@ void apiWrite(struct pc_price *pprice)
 }
 
 /*
+   INPUT
+ */
+void apiWriteError(int errorCode, char *errorDesc)
+{
+    LFMarketDataField data={};
+    printf("%d, %s\n", errorCode, errorDesc);
+    if(apiWriter == NULL)
+    {
+        return;
+    }
+    apiWriter->write_error_frame(&data, sizeof(LFMarketDataField), apiSourceId, MSG_TYPE_LF_MD, 1/*islast*/, -1/*invalidRid*/, errorCode, errorDesc);
+}
+
+/*
  * INPUT 
  * profile   // file path
  * OUTPUT
@@ -207,5 +221,5 @@ int main(int argc, char *argv[])
     JournalPair l1MdPair = getMdJournalPair(cfg.platform);
     apiWriter = JournalWriter::create(l1MdPair.first, l1MdPair.second, cfg.journalWriterName);
     apiSourceId = cfg.platform;
-    PCStart(&cfg, apiWrite);
+    PCStart(&cfg, apiWrite, apiWriteError);
 }

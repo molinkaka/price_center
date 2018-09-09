@@ -50,9 +50,10 @@ int tcpSendN(struct st_tcpHandle *pH, char *buf, int size);
 
 
 /*THREAD API START*/
-int PCStart(struct pc_cfg *p, void (*pWriter)(struct pc_price *));
+int PCStart(struct pc_cfg *p, void (*pWriter)(struct pc_price *), void (*pWriteError)(int, char *));
 //must implemented in external call code
 void apiWrite(struct pc_price *pprice);
+void apiWriteError(int errorCode, char *errorDesc);
 /*THREAD API END*/
 
 #endif  //PRICECENTER_H
