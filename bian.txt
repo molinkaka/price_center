@@ -1,10 +1,14 @@
-#kkk
+#num of tcp connections
 numOfConnections 10
-tps 20
-#url https://api.binance.com/api/v1/depth?symbol=ETHUSDT&limit=5
-url https://api.binance.com/kkk
+#total tps for all connections
+tps 40
+#request url
+url https://api.binance.com/api/v1/depth?symbol=ETHUSDT&limit=5
+#url https://api.binance.com/kkk
+#identify which API func to use in PCPlatformAPI.cpp.  Define in LFConstants.h and LFUtils.h
 platform 45
-#kkk
+#writer name of journal
 journalWriterName BianWriter
-bindIPListFileName bianbind.txt
+#need PATH + FILENAME
+bindIPListFileName /home/ubuntu/ThreeLegCat/wingchun/md/bianbind.txt
 sendIPListFileName /home/ubuntu/ThreeLegCat/wingchun/md/biansend.txt
